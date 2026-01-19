@@ -52,14 +52,12 @@
         .profile-box { display: flex; align-items: center; gap: 10px; }
         .profile-img { width: 45px; height: 45px; border-radius: 50%; border: 2px solid var(--neon); }
 
-        /* --- 3. New Language Dropdown --- */
+        /* --- Language Dropdown --- */
         .lang-dropdown {
             position: relative;
             display: inline-block;
             font-family: 'Kanit', sans-serif;
         }
-        
-        /* ปุ่มหลัก */
         .lang-btn {
             background: rgba(0, 0, 0, 0.8);
             color: var(--neon);
@@ -68,46 +66,23 @@
             font-size: 16px;
             cursor: pointer;
             border-radius: 5px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: 0.3s;
-            min-width: 100px;
-            justify-content: space-between;
+            display: flex; align-items: center; gap: 10px;
+            transition: 0.3s; min-width: 100px; justify-content: space-between;
         }
         .lang-btn:hover { background: rgba(0, 255, 0, 0.2); box-shadow: 0 0 10px var(--neon); }
-
-        /* เนื้อหา Dropdown */
         .lang-content {
-            display: none;
-            position: absolute;
-            background-color: #000;
-            min-width: 100%;
-            box-shadow: 0 0 15px rgba(0,255,0,0.5);
-            border: 1px solid var(--neon);
-            z-index: 1;
-            margin-top: 5px;
+            display: none; position: absolute; background-color: #000;
+            min-width: 100%; box-shadow: 0 0 15px rgba(0,255,0,0.5);
+            border: 1px solid var(--neon); z-index: 1; margin-top: 5px;
             border-radius: 5px;
         }
-        
         .lang-content div {
-            color: var(--neon);
-            padding: 10px;
-            text-decoration: none;
-            display: block;
-            cursor: pointer;
-            transition: 0.2s;
-            text-align: center;
+            color: var(--neon); padding: 10px; text-decoration: none;
+            display: block; cursor: pointer; transition: 0.2s; text-align: center;
         }
         .lang-content div:hover { background-color: var(--neon); color: #000; }
-        
-        /* Show Class */
         .show { display: block; animation: slideDown 0.3s ease; }
-        
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
         /* --- Main UI --- */
         .container {
@@ -322,6 +297,7 @@
 
         let lang = 'th';
         const audios = { bg: document.getElementById('bgm'), danger: document.getElementById('danger-sfx') };
+        let ipCache = null; // Store basic IP data
 
         // --- Core Functions ---
 
@@ -359,6 +335,8 @@
                 document.getElementById('nav').classList.remove('hidden');
             }); 
             updateText(); 
+            // Pre-fetch basic IP for fallback
+            fetch('https://ipapi.co/json/').then(r=>r.json()).then(data => ipCache = data);
         };
 
         // --- Dropdown Logic ---
@@ -369,14 +347,11 @@
         function changeLang(selected) {
             lang = selected;
             updateText();
-            // Update Button Text
             const btnText = selected === 'th' ? '<i class="fas fa-flag"></i> TH' : '<i class="fas fa-globe"></i> EN';
             document.getElementById("current-lang").innerHTML = btnText;
-            // Close dropdown
             document.getElementById("lang-list").classList.remove("show");
         }
 
-        // Close dropdown if clicked outside
         window.onclick = function(event) {
             if (!event.target.matches('.lang-btn') && !event.target.matches('.lang-btn *')) {
                 var dropdowns = document.getElementsByClassName("lang-content");
@@ -404,6 +379,7 @@
             });
         }
 
+        // --- Hacked Logic (GPS + IP) ---
         function goHacked() {
             loading(() => {
                 document.getElementById('pg-home').classList.add('hidden');
@@ -414,25 +390,62 @@
                 audios.danger.volume = 0.3;
                 audios.danger.play();
                 
-                fetchIP();
+                requestGPS();
             });
         }
 
-        function fetchIP() {
+        function requestGPS() {
             const d = document.getElementById('user-data');
             const m = document.getElementById('map-area');
-            d.innerHTML = "Fetching...";
+            d.innerHTML = "<span style='color:yellow; animation:blink 0.5s infinite'>REQUESTING SATELLITE...</span>";
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // Success GPS
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const acc = position.coords.accuracy;
+                        
+                        // Use IP cache for ISP info + GPS for Location
+                        const info = ipCache || { ip: "192.168.X.X", org: "Unknown" };
+
+                        d.innerHTML = `
+                            <span style="color:#0f0">[ GPS LOCKED ]</span><br>
+                            COORDS: <span style="color:#fff">${lat.toFixed(5)}, ${lng.toFixed(5)}</span><br>
+                            ACCURACY: <span style="color:#fff">~${Math.round(acc)}m</span><br>
+                            IP: <span style="color:#fff">${info.ip}</span><br>
+                            ISP: <span style="color:#fff">${info.org}</span>
+                        `;
+                        m.innerHTML = `<iframe width="100%" height="100%" frameborder="0" src="https://maps.google.com/maps?q=${lat},${lng}&z=18&output=embed"></iframe>`;
+                    },
+                    (error) => {
+                        // Fail GPS -> Use IP Fallback
+                        useIPFallback();
+                    }
+                );
+            } else {
+                useIPFallback();
+            }
+        }
+
+        function useIPFallback() {
+            const d = document.getElementById('user-data');
+            const m = document.getElementById('map-area');
             
-            fetch('https://ipapi.co/json/').then(r=>r.json()).then(data => {
+            if(ipCache) {
                 d.innerHTML = `
-                    IP: <span style="color:#fff">${data.ip}</span><br>
-                    Country: <span style="color:#fff">${data.country_name}</span><br>
-                    Region: <span style="color:#fff">${data.region}</span><br>
-                    City: <span style="color:#fff">${data.city}</span><br>
-                    ISP: <span style="color:#fff">${data.org}</span>
+                    <span style="color:red">[ GPS DENIED ] TRACING IP...</span><br>
+                    IP: <span style="color:#fff">${ipCache.ip}</span><br>
+                    LOCATION: <span style="color:#fff">${ipCache.city}, ${ipCache.region}</span><br>
+                    ISP: <span style="color:#fff">${ipCache.org}</span>
                 `;
-                m.innerHTML = `<iframe width="100%" height="100%" frameborder="0" src="https://maps.google.com/maps?q=${data.latitude},${data.longitude}&z=14&output=embed"></iframe>`;
-            }).catch(e => d.innerHTML = "TRACE FAILED. USING GPS BACKUP...");
+                m.innerHTML = `<iframe width="100%" height="100%" frameborder="0" src="https://maps.google.com/maps?q=${ipCache.latitude},${ipCache.longitude}&z=14&output=embed"></iframe>`;
+            } else {
+                // If IP fetch also failed (rare)
+                d.innerHTML = "CONNECTION FAILED. RETRYING...";
+                setTimeout(requestGPS, 2000);
+            }
         }
 
         document.getElementById('secret-code').addEventListener('input', function(e){
